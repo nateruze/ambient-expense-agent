@@ -21,6 +21,7 @@ from google.adk.agents import LlmAgent
 from google.adk.agents.context import Context
 from google.adk.apps import App
 from google.adk.events.event import Event
+from google.adk.events.event_actions import EventActions
 from google.adk.events.request_input import RequestInput
 from google.adk.models import Gemini
 from google.adk.workflow import Edge, FunctionNode, Workflow
@@ -32,23 +33,37 @@ MODEL = "gemini-3.6-flash"
 class ExpenseReport(BaseModel):
     amount: float = Field(..., description="The amount of the expense in USD")
     submitter: str = Field(..., description="Name or ID of the submitter")
-    category: str = Field(..., description="Category of the expense (e.g., travel, meals, equipment)")
+    category: str = Field(
+        ..., description="Category of the expense (e.g., travel, meals, equipment)"
+    )
     description: str = Field(..., description="Detailed description of the expense")
     date: str = Field(..., description="Date of expense submission (YYYY-MM-DD)")
 
 
 class RiskAnalysis(BaseModel):
     risk_score: str = Field(..., description="Risk level: LOW, MEDIUM, or HIGH")
-    policy_violations: list[str] = Field(default_factory=list, description="Any potential policy violations identified")
+    policy_violations: list[str] = Field(
+        default_factory=list, description="Any potential policy violations identified"
+    )
     summary: str = Field(..., description="Detailed reasoning for the risk judgment")
 
 
 class ExpenseDecision(BaseModel):
-    status: str = Field(..., description="Decision status: APPROVED, REJECTED, or AUTO_APPROVED")
-    decision_by: str = Field(..., description="Who made the decision: auto_rule or human")
-    risk_analysis: Optional[dict[str, Any]] = Field(default=None, description="Risk analysis results if reviewed by LLM")
-    expense: dict[str, Any] = Field(..., description="The original expense report details")
-    notes: Optional[str] = Field(default=None, description="Additional decision notes or human reviewer feedback")
+    status: str = Field(
+        ..., description="Decision status: APPROVED, REJECTED, or AUTO_APPROVED"
+    )
+    decision_by: str = Field(
+        ..., description="Who made the decision: auto_rule or human"
+    )
+    risk_analysis: Optional[dict[str, Any]] = Field(
+        default=None, description="Risk analysis results if reviewed by LLM"
+    )
+    expense: dict[str, Any] = Field(
+        ..., description="The original expense report details"
+    )
+    notes: Optional[str] = Field(
+        default=None, description="Additional decision notes or human reviewer feedback"
+    )
 
 
 def _parse_expense(data: Any) -> ExpenseReport:
@@ -75,14 +90,14 @@ def route_expense(node_input: Any) -> Event:
         return Event(
             output=expense_dict,
             content=content,
-            route="auto_approve",
-            state={"expense": expense_dict},
+            actions=EventActions(
+                route="auto_approve", state_delta={"expense": expense_dict}
+            ),
         )
     return Event(
         output=expense_dict,
         content=content,
-        route="llm_review",
-        state={"expense": expense_dict},
+        actions=EventActions(route="llm_review", state_delta={"expense": expense_dict}),
     )
 
 
@@ -101,7 +116,9 @@ def auto_approve_node(ctx: Context, node_input: dict[str, Any]) -> Event:
         notes="Auto-approved instantly under $100 policy rule.",
     )
     d = decision.model_dump()
-    content = types.Content(role="model", parts=[types.Part.from_text(text=json.dumps(d))])
+    content = types.Content(
+        role="model", parts=[types.Part.from_text(text=json.dumps(d))]
+    )
     return Event(output=d, content=content)
 
 
@@ -154,20 +171,30 @@ async def human_reviewer(ctx: Context, node_input: dict[str, Any]):
         notes=f"Human reviewer decision: {ctx.resume_inputs.get('human_approval')}",
     )
     d = decision.model_dump()
-    content = types.Content(role="model", parts=[types.Part.from_text(text=json.dumps(d))])
+    content = types.Content(
+        role="model", parts=[types.Part.from_text(text=json.dumps(d))]
+    )
     yield Event(output=d, content=content)
 
 
 # Explicit FunctionNodes for workflow topology
 route_expense_node = FunctionNode(func=route_expense, name="route_expense")
-auto_approve_node_wrapper = FunctionNode(func=auto_approve_node, name="auto_approve_node")
-human_reviewer_node = FunctionNode(func=human_reviewer, name="human_reviewer", rerun_on_resume=True)
+auto_approve_node_wrapper = FunctionNode(
+    func=auto_approve_node, name="auto_approve_node"
+)
+human_reviewer_node = FunctionNode(
+    func=human_reviewer, name="human_reviewer", rerun_on_resume=True
+)
 
 root_agent = Workflow(
     name="ambient_expense_agent",
     edges=[
         ("START", route_expense_node),
-        Edge(from_node=route_expense_node, to_node=auto_approve_node_wrapper, route="auto_approve"),
+        Edge(
+            from_node=route_expense_node,
+            to_node=auto_approve_node_wrapper,
+            route="auto_approve",
+        ),
         Edge(from_node=route_expense_node, to_node=llm_reviewer, route="llm_review"),
         Edge(from_node=llm_reviewer, to_node=human_reviewer_node),
     ],
