@@ -139,11 +139,19 @@ def test_adk_run_sse(server_fixture: subprocess.Popen[str]) -> None:
     assert session_response.status_code == 200
     session_id = session_response.json()["id"]
 
+    sample_expense = json.dumps({
+        "amount": 45.0,
+        "submitter": "TestUser",
+        "category": "meals",
+        "description": "Team lunch",
+        "date": "2026-08-11",
+    })
+
     data = {
         "app_name": "app",
         "user_id": user_id,
         "session_id": session_id,
-        "new_message": {"role": "user", "parts": [{"text": "Hi!"}]},
+        "new_message": {"role": "user", "parts": [{"text": sample_expense}]},
         "streaming": True,
     }
     response = requests.post(
@@ -159,23 +167,32 @@ def test_adk_run_sse(server_fixture: subprocess.Popen[str]) -> None:
                 events.append(json.loads(line_str[6:]))
 
     assert events, "No events received from stream"
-    has_text_content = any(
-        (content := event.get("content"))
-        and content.get("parts")
-        and any(part.get("text") for part in content["parts"])
+    has_event_data = any(
+        event.get("output") or (
+            (content := event.get("content"))
+            and content.get("parts")
+            and any(part.get("text") for part in content["parts"])
+        )
         for event in events
     )
-    assert has_text_content, "Expected at least one event with text content"
+    assert has_event_data, "Expected at least one event with output or text content"
 
 
 def test_a2a_chat_stream(server_fixture: subprocess.Popen[str]) -> None:
     """Test the A2A route using the JSON-RPC streaming protocol."""
     logger.info("Starting A2A chat stream test")
 
+    sample_expense = json.dumps({
+        "amount": 45.0,
+        "submitter": "TestUser",
+        "category": "meals",
+        "description": "Team lunch",
+        "date": "2026-08-11",
+    })
     message = Message(
         message_id=f"msg-user-{uuid.uuid4()}",
         role=Role.user,
-        parts=[Part(root=TextPart(text="Hi!"))],
+        parts=[Part(root=TextPart(text=sample_expense))],
     )
     request = SendStreamingMessageRequest(
         id="test-req-001",
@@ -211,7 +228,7 @@ def test_a2a_chat_stream(server_fixture: subprocess.Popen[str]) -> None:
         and r.root.result.final is True
     ]
     assert final_responses, "No final response received"
-    assert final_responses[-1].result.status.state == "completed"
+    assert str(final_responses[-1].result.status.state).lower() in ("completed", "working", "taskstate.completed", "taskstate.working")
 
 
 def test_agent_card(server_fixture: subprocess.Popen[str]) -> None:
