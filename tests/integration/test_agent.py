@@ -33,13 +33,15 @@ def test_agent_stream() -> None:
     session = session_service.create_session_sync(user_id="test_user", app_name="test")
     runner = Runner(agent=root_agent, session_service=session_service, app_name="test")
 
-    expense_payload = json.dumps({
-        "amount": 42.0,
-        "submitter": "TestUser",
-        "category": "supplies",
-        "description": "Office paper",
-        "date": "2026-08-11"
-    })
+    expense_payload = json.dumps(
+        {
+            "amount": 42.0,
+            "submitter": "TestUser",
+            "category": "supplies",
+            "description": "Office paper",
+            "date": "2026-08-11",
+        }
+    )
 
     message = types.Content(
         role="user", parts=[types.Part.from_text(text=expense_payload)]

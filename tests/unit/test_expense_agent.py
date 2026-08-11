@@ -21,10 +21,12 @@ from google.genai import types
 from app.agent import (
     ExpenseReport,
     _parse_expense,
-    app as adk_app,
     auto_approve_node,
     human_reviewer,
     route_expense,
+)
+from app.agent import (
+    app as adk_app,
 )
 
 
@@ -59,7 +61,9 @@ def test_parse_expense_helper() -> None:
     assert parsed_str.submitter == "Alice"
 
     # From Content
-    content = types.Content(role="user", parts=[types.Part.from_text(text=json.dumps(data_dict))])
+    content = types.Content(
+        role="user", parts=[types.Part.from_text(text=json.dumps(data_dict))]
+    )
     parsed_content = _parse_expense(content)
     assert parsed_content.category == "meals"
 
@@ -157,7 +161,9 @@ async def test_human_reviewer_approve() -> None:
 async def test_human_reviewer_reject() -> None:
     """Test human_reviewer produces REJECTED decision when resume_inputs contains rejection."""
     ctx = DummyContext(
-        state={"expense": {"amount": 500.0, "submitter": "Frank", "category": "equipment"}},
+        state={
+            "expense": {"amount": 500.0, "submitter": "Frank", "category": "equipment"}
+        },
         resume_inputs={"human_approval": "reject"},
     )
     risk_info = {"risk_score": "HIGH", "summary": "Exceeds equipment cap."}
@@ -177,19 +183,23 @@ async def test_workflow_auto_approve_execution() -> None:
         app_name="app", user_id="test_user"
     )
 
-    payload = json.dumps({
-        "amount": 75.0,
-        "submitter": "Grace",
-        "category": "meals",
-        "description": "Client dinner",
-        "date": "2026-08-11"
-    })
+    payload = json.dumps(
+        {
+            "amount": 75.0,
+            "submitter": "Grace",
+            "category": "meals",
+            "description": "Client dinner",
+            "date": "2026-08-11",
+        }
+    )
 
     outputs = []
     async for event in runner.run_async(
         user_id="test_user",
         session_id=session.id,
-        new_message=types.Content(role="user", parts=[types.Part.from_text(text=payload)]),
+        new_message=types.Content(
+            role="user", parts=[types.Part.from_text(text=payload)]
+        ),
     ):
         if event.output is not None:
             outputs.append(event.output)
